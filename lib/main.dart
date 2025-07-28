@@ -1622,7 +1622,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                           Container(
                                             padding: const EdgeInsets.all(8),
                                             child: Icon(
-                                              Icons.reorder,
+                                              Icons.drag_indicator,
                                               color: colorScheme.onSurface.withOpacity(0.5),
                                               size: 20,
                                             ),

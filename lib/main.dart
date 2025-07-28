@@ -278,7 +278,12 @@ class _TodoHomePageState extends State<TodoHomePage> {
   DateTime? _selectedDueDate;
   String _searchQuery = '';
   bool _isSearching = false;
+  bool _isBulkSelecting = false;
+  Set<String> _selectedTaskIds = {};
   int? _editingTaskIndex; // Track which task is being edited
+  TaskCategory? _editingCategory;
+  TaskPriority? _editingPriority;
+  DateTime? _editingDueDate;
 
   @override
   void initState() {
@@ -362,6 +367,154 @@ class _TodoHomePageState extends State<TodoHomePage> {
   void _updateSearchQuery(String query) {
     setState(() {
       _searchQuery = query;
+    });
+  }
+
+  void _startBulkSelection() {
+    setState(() {
+      _isBulkSelecting = true;
+      _selectedTaskIds.clear();
+    });
+  }
+
+  void _stopBulkSelection() {
+    setState(() {
+      _isBulkSelecting = false;
+      _selectedTaskIds.clear();
+    });
+  }
+
+  void _toggleTaskSelection(String taskId) {
+    setState(() {
+      if (_selectedTaskIds.contains(taskId)) {
+        _selectedTaskIds.remove(taskId);
+      } else {
+        _selectedTaskIds.add(taskId);
+      }
+    });
+  }
+
+  void _selectAllTasks() {
+    setState(() {
+      _selectedTaskIds.clear();
+      for (var task in _filteredTasks) {
+        _selectedTaskIds.add(task.title + task.hashCode.toString());
+      }
+    });
+  }
+
+  void _bulkCompleteSelected() {
+    setState(() {
+      for (var task in _tasks) {
+        final taskId = task.title + task.hashCode.toString();
+        if (_selectedTaskIds.contains(taskId)) {
+          task.isCompleted = true;
+        }
+      }
+      _selectedTaskIds.clear();
+      _isBulkSelecting = false;
+    });
+    _saveTasks();
+  }
+
+  void _bulkDeleteSelected() async {
+    final shouldDelete = await _showBulkDeleteConfirmation();
+    if (shouldDelete) {
+      setState(() {
+        _tasks.removeWhere((task) {
+          final taskId = task.title + task.hashCode.toString();
+          return _selectedTaskIds.contains(taskId);
+        });
+        _selectedTaskIds.clear();
+        _isBulkSelecting = false;
+      });
+      _saveTasks();
+    }
+  }
+
+  void _clearAllCompleted() async {
+    final completedTasks = _tasks.where((task) => task.isCompleted).toList();
+    if (completedTasks.isEmpty) return;
+
+    final shouldClear = await _showClearCompletedConfirmation(completedTasks.length);
+    if (shouldClear) {
+      setState(() {
+        _tasks.removeWhere((task) => task.isCompleted);
+      });
+      _saveTasks();
+    }
+  }
+
+  Future<bool> _showBulkDeleteConfirmation() async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Selected Tasks'),
+        content: Text('Are you sure you want to delete ${_selectedTaskIds.length} selected tasks?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
+  Future<bool> _showClearCompletedConfirmation(int count) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear Completed Tasks'),
+        content: Text('Are you sure you want to delete $count completed tasks?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
+  Future<void> _selectEditingDueDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _editingDueDate ?? DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: Colors.blue,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    
+    if (picked != null) {
+      setState(() {
+        _editingDueDate = picked;
+      });
+    }
+  }
+
+  void _clearEditingDueDate() {
+    setState(() {
+      _editingDueDate = null;
     });
   }
 
@@ -514,6 +667,9 @@ class _TodoHomePageState extends State<TodoHomePage> {
     setState(() {
       _editingTaskIndex = index;
       _editController.text = task.title;
+      _editingCategory = task.category;
+      _editingPriority = task.priority;
+      _editingDueDate = task.dueDate;
     });
   }
 
@@ -524,8 +680,14 @@ class _TodoHomePageState extends State<TodoHomePage> {
       
       setState(() {
         _tasks[mainIndex].title = _editController.text.trim();
+        _tasks[mainIndex].category = _editingCategory!;
+        _tasks[mainIndex].priority = _editingPriority!;
+        _tasks[mainIndex].dueDate = _editingDueDate;
         _editingTaskIndex = null;
         _editController.clear();
+        _editingCategory = null;
+        _editingPriority = null;
+        _editingDueDate = null;
       });
       _saveTasks();
     } else {
@@ -537,6 +699,9 @@ class _TodoHomePageState extends State<TodoHomePage> {
     setState(() {
       _editingTaskIndex = null;
       _editController.clear();
+      _editingCategory = null;
+      _editingPriority = null;
+      _editingDueDate = null;
     });
   }
 
@@ -625,12 +790,65 @@ class _TodoHomePageState extends State<TodoHomePage> {
               icon: const Icon(Icons.close, color: Colors.white),
               tooltip: 'Close Search',
             )
+          else if (_isBulkSelecting)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${_selectedTaskIds.length}',
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
+                IconButton(
+                  onPressed: _stopBulkSelection,
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  tooltip: 'Cancel Selection',
+                ),
+              ],
+            )
           else
             IconButton(
               onPressed: _startSearch,
               icon: const Icon(Icons.search, color: Colors.white),
               tooltip: 'Search Tasks',
             ),
+          // Overflow menu
+          if (!_isSearching && !_isBulkSelecting)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.white),
+              onSelected: (value) {
+                switch (value) {
+                  case 'bulk_select':
+                    _startBulkSelection();
+                    break;
+                  case 'clear_completed':
+                    _clearAllCompleted();
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'bulk_select',
+                  child: Row(
+                    children: [
+                      Icon(Icons.checklist),
+                      SizedBox(width: 8),
+                      Text('Select Multiple'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'clear_completed',
+                  child: Row(
+                    children: [
+                      Icon(Icons.clear_all),
+                      SizedBox(width: 8),
+                      Text('Clear Completed'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          // Theme toggle
           IconButton(
             onPressed: widget.onThemeToggle,
             icon: Icon(
@@ -1022,134 +1240,242 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                 padding: const EdgeInsets.all(16),
                                 child: Row(
                                   children: [
-                                    // Checkbox
-                                    GestureDetector(
-                                      onTap: () => _toggleTask(index),
-                                      child: Container(
-                                        width: 24,
-                                        height: 24,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: task.isCompleted ? Colors.green : Colors.grey,
-                                            width: 2,
+                                    // Selection checkbox (in bulk mode) or regular checkbox
+                                    if (_isBulkSelecting)
+                                      GestureDetector(
+                                        onTap: () => _toggleTaskSelection(task.title + task.hashCode.toString()),
+                                        child: Container(
+                                          width: 24,
+                                          height: 24,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: _selectedTaskIds.contains(task.title + task.hashCode.toString()) 
+                                                  ? Colors.blue 
+                                                  : Colors.grey,
+                                              width: 2,
+                                            ),
+                                            color: _selectedTaskIds.contains(task.title + task.hashCode.toString()) 
+                                                ? Colors.blue 
+                                                : Colors.transparent,
                                           ),
-                                          color: task.isCompleted ? Colors.green : Colors.transparent,
+                                          child: _selectedTaskIds.contains(task.title + task.hashCode.toString())
+                                              ? const Icon(
+                                                  Icons.check,
+                                                  size: 16,
+                                                  color: Colors.white,
+                                                )
+                                              : null,
                                         ),
-                                        child: task.isCompleted
-                                            ? const Icon(
-                                                Icons.check,
-                                                size: 16,
-                                                color: Colors.white,
-                                              )
-                                            : null,
+                                      )
+                                    else
+                                      // Regular completion checkbox
+                                      GestureDetector(
+                                        onTap: () => _toggleTask(index),
+                                        child: Container(
+                                          width: 24,
+                                          height: 24,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: task.isCompleted ? Colors.green : Colors.grey,
+                                              width: 2,
+                                            ),
+                                            color: task.isCompleted ? Colors.green : Colors.transparent,
+                                          ),
+                                          child: task.isCompleted
+                                              ? const Icon(
+                                                  Icons.check,
+                                                  size: 16,
+                                                  color: Colors.white,
+                                                )
+                                              : null,
+                                        ),
                                       ),
-                                    ),
                                     const SizedBox(width: 12),
                                     // Task content
                                     Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          _editingTaskIndex == index
-                                              ? TextField(
-                                                  controller: _editController,
-                                                  autofocus: true,
-                                                  decoration: const InputDecoration(
-                                                    border: OutlineInputBorder(),
-                                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                  ),
-                                                  onSubmitted: (_) => _saveEditedTask(),
-                                                )
+                                      child: GestureDetector(
+                                        onTap: _isBulkSelecting 
+                                            ? () => _toggleTaskSelection(task.title + task.hashCode.toString())
+                                            : _editingTaskIndex == index 
+                                                ? null 
+                                                : () => _startEditingTask(index),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            _editingTaskIndex == index
+                                                ? Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      // Title editing
+                                                      TextField(
+                                                        controller: _editController,
+                                                        style: const TextStyle(fontSize: 16),
+                                                        decoration: const InputDecoration(
+                                                          border: OutlineInputBorder(),
+                                                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                          isDense: true,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 8),
+                                                      // Category editing
+                                                      Row(
+                                                        children: [
+                                                          const Text('Category: ', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                                          Expanded(
+                                                            child: Container(
+                                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                              decoration: BoxDecoration(
+                                                                color: _editingCategory!.color.withOpacity(0.1),
+                                                                borderRadius: BorderRadius.circular(6),
+                                                                border: Border.all(color: _editingCategory!.color.withOpacity(0.3)),
+                                                              ),
+                                                              child: DropdownButtonHideUnderline(
+                                                                child: DropdownButton<TaskCategory>(
+                                                                  value: _editingCategory,
+                                                                  isExpanded: true,
+                                                                  isDense: true,
+                                                                  style: TextStyle(color: _editingCategory!.color, fontSize: 12),
+                                                                  onChanged: (TaskCategory? newValue) {
+                                                                    if (newValue != null) {
+                                                                      setState(() {
+                                                                        _editingCategory = newValue;
+                                                                      });
+                                                                    }
+                                                                  },
+                                                                  items: TaskCategory.values.map<DropdownMenuItem<TaskCategory>>((TaskCategory category) {
+                                                                    return DropdownMenuItem<TaskCategory>(
+                                                                      value: category,
+                                                                      child: Row(
+                                                                        mainAxisSize: MainAxisSize.min,
+                                                                        children: [
+                                                                          Icon(category.icon, size: 14, color: category.color),
+                                                                          const SizedBox(width: 4),
+                                                                          Text(category.displayName),
+                                                                        ],
+                                                                      ),
+                                                                    );
+                                                                  }).toList(),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      // Priority editing
+                                                      Row(
+                                                        children: [
+                                                          const Text('Priority: ', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                                          Expanded(
+                                                            child: Container(
+                                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                              decoration: BoxDecoration(
+                                                                color: _editingPriority!.color.withOpacity(0.1),
+                                                                borderRadius: BorderRadius.circular(6),
+                                                                border: Border.all(color: _editingPriority!.color.withOpacity(0.3)),
+                                                              ),
+                                                              child: DropdownButtonHideUnderline(
+                                                                child: DropdownButton<TaskPriority>(
+                                                                  value: _editingPriority,
+                                                                  isExpanded: true,
+                                                                  isDense: true,
+                                                                  style: TextStyle(color: _editingPriority!.color, fontSize: 12),
+                                                                  onChanged: (TaskPriority? newValue) {
+                                                                    if (newValue != null) {
+                                                                      setState(() {
+                                                                        _editingPriority = newValue;
+                                                                      });
+                                                                    }
+                                                                  },
+                                                                  items: TaskPriority.values.map<DropdownMenuItem<TaskPriority>>((TaskPriority priority) {
+                                                                    return DropdownMenuItem<TaskPriority>(
+                                                                      value: priority,
+                                                                      child: Row(
+                                                                        mainAxisSize: MainAxisSize.min,
+                                                                        children: [
+                                                                          Icon(priority.icon, size: 14, color: priority.color),
+                                                                          const SizedBox(width: 4),
+                                                                          Text(priority.displayName),
+                                                                        ],
+                                                                      ),
+                                                                    );
+                                                                  }).toList(),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      // Due date editing
+                                                      Row(
+                                                        children: [
+                                                          const Text('Due Date: ', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                                          Expanded(
+                                                            child: GestureDetector(
+                                                              onTap: _selectEditingDueDate,
+                                                              child: Container(
+                                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                decoration: BoxDecoration(
+                                                                  color: _editingDueDate != null ? Colors.blue.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+                                                                  borderRadius: BorderRadius.circular(6),
+                                                                  border: Border.all(color: _editingDueDate != null ? Colors.blue.withOpacity(0.3) : Colors.grey.withOpacity(0.3)),
+                                                                ),
+                                                                child: Row(
+                                                                  children: [
+                                                                    Icon(Icons.calendar_today, size: 12, color: _editingDueDate != null ? Colors.blue : Colors.grey),
+                                                                    const SizedBox(width: 4),
+                                                                    Expanded(
+                                                                      child: Text(
+                                                                        _editingDueDate != null ? _formatDueDate(_editingDueDate!) : 'No due date',
+                                                                        style: TextStyle(
+                                                                          color: _editingDueDate != null ? Colors.blue : Colors.grey,
+                                                                          fontSize: 12,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                    if (_editingDueDate != null)
+                                                                      GestureDetector(
+                                                                        onTap: _clearEditingDueDate,
+                                                                        child: const Icon(Icons.close, size: 12, color: Colors.grey),
+                                                                      ),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ],
+                                                  )
                                               : Text(
-                                                  task.title,
-                                                  style: TextStyle(
-                                                    decoration: task.isCompleted
-                                                        ? TextDecoration.lineThrough
-                                                        : TextDecoration.none,
-                                                    color: task.isCompleted
-                                                        ? colorScheme.onSurface.withOpacity(0.6)
-                                                        : colorScheme.onSurface,
-                                                    fontSize: 16,
-                                                  ),
-                                                ),
-                                          const SizedBox(height: 4),
-                                          // Category, Priority, and Due Date Row
-                                          Wrap(
-                                            spacing: 6,
-                                            runSpacing: 4,
-                                            children: [
-                                              // Priority Chip (shown first for importance)
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: task.priority.color.withOpacity(0.1),
-                                                  borderRadius: BorderRadius.circular(12),
-                                                  border: Border.all(
-                                                    color: task.priority.color.withOpacity(0.3),
-                                                    width: 1,
-                                                  ),
-                                                ),
-                                                child: Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Icon(
-                                                      task.priority.icon,
-                                                      size: 12,
-                                                      color: task.priority.color,
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      task.priority.displayName,
-                                                      style: TextStyle(
-                                                        fontSize: 11,
-                                                        color: task.priority.color,
-                                                        fontWeight: FontWeight.w600,
-                                                      ),
-                                                    ),
-                                                  ],
+                                                task.title,
+                                                style: TextStyle(
+                                                  decoration: task.isCompleted
+                                                      ? TextDecoration.lineThrough
+                                                      : TextDecoration.none,
+                                                  color: task.isCompleted
+                                                      ? colorScheme.onSurface.withOpacity(0.6)
+                                                      : colorScheme.onSurface,
+                                                  fontSize: 16,
                                                 ),
                                               ),
-                                              // Category Chip
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: task.category.color.withOpacity(0.1),
-                                                  borderRadius: BorderRadius.circular(12),
-                                                  border: Border.all(
-                                                    color: task.category.color.withOpacity(0.3),
-                                                    width: 1,
-                                                  ),
-                                                ),
-                                                child: Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Icon(
-                                                      task.category.icon,
-                                                      size: 12,
-                                                      color: task.category.color,
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      task.category.displayName,
-                                                      style: TextStyle(
-                                                        fontSize: 11,
-                                                        color: task.category.color,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              // Due Date Chip
-                                              if (task.dueDate != null)
+                                            const SizedBox(height: 4),
+                                            // Category, Priority, and Due Date Row
+                                            Wrap(
+                                              spacing: 6,
+                                              runSpacing: 4,
+                                              children: [
+                                                // Priority Chip (shown first for importance)
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                                   decoration: BoxDecoration(
-                                                    color: _getDueDateColor(task).withOpacity(0.1),
+                                                    color: task.priority.color.withOpacity(0.1),
                                                     borderRadius: BorderRadius.circular(12),
                                                     border: Border.all(
-                                                      color: _getDueDateColor(task).withOpacity(0.3),
+                                                      color: task.priority.color.withOpacity(0.3),
                                                       width: 1,
                                                     ),
                                                   ),
@@ -1157,29 +1483,93 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                                     mainAxisSize: MainAxisSize.min,
                                                     children: [
                                                       Icon(
-                                                        task.isOverdue 
-                                                            ? Icons.warning 
-                                                            : task.isDueToday 
-                                                                ? Icons.today 
-                                                                : Icons.schedule,
+                                                        task.priority.icon,
                                                         size: 12,
-                                                        color: _getDueDateColor(task),
+                                                        color: task.priority.color,
                                                       ),
                                                       const SizedBox(width: 4),
                                                       Text(
-                                                        _formatDueDate(task.dueDate!),
+                                                        task.priority.displayName,
                                                         style: TextStyle(
                                                           fontSize: 11,
-                                                          color: _getDueDateColor(task),
+                                                          color: task.priority.color,
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                // Category Chip
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: task.category.color.withOpacity(0.1),
+                                                    borderRadius: BorderRadius.circular(12),
+                                                    border: Border.all(
+                                                      color: task.category.color.withOpacity(0.3),
+                                                      width: 1,
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        task.category.icon,
+                                                        size: 12,
+                                                        color: task.category.color,
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        task.category.displayName,
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: task.category.color,
                                                           fontWeight: FontWeight.w500,
                                                         ),
                                                       ),
                                                     ],
                                                   ),
                                                 ),
-                                            ],
-                                          ),
-                                        ],
+                                                // Due Date Chip
+                                                if (task.dueDate != null)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: _getDueDateColor(task).withOpacity(0.1),
+                                                      borderRadius: BorderRadius.circular(12),
+                                                      border: Border.all(
+                                                        color: _getDueDateColor(task).withOpacity(0.3),
+                                                        width: 1,
+                                                      ),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Icon(
+                                                          task.isOverdue 
+                                                              ? Icons.warning 
+                                                              : task.isDueToday 
+                                                                  ? Icons.today 
+                                                                  : Icons.schedule,
+                                                          size: 12,
+                                                          color: _getDueDateColor(task),
+                                                        ),
+                                                        const SizedBox(width: 4),
+                                                        Text(
+                                                          _formatDueDate(task.dueDate!),
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            color: _getDueDateColor(task),
+                                                            fontWeight: FontWeight.w500,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                     // Action buttons
@@ -1211,34 +1601,34 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                           ),
                                         ],
                                       )
-                                    else
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          // Drag handle (only show when reordering is available)
-                                          if (_currentFilter == TaskFilter.all && _searchQuery.isEmpty)
-                                            Container(
-                                              padding: const EdgeInsets.all(8),
-                                              child: Icon(
-                                                Icons.drag_handle,
-                                                color: colorScheme.onSurface.withOpacity(0.5),
-                                                size: 20,
-                                              ),
-                                            ),
-                                          // Delete button
-                                          GestureDetector(
-                                            onTap: () => _deleteTask(index),
-                                            child: Container(
-                                              padding: const EdgeInsets.all(8),
-                                              child: const Icon(
-                                                Icons.delete_outline,
-                                                color: Colors.red,
-                                                size: 20,
-                                              ),
+                                  else if (!_isBulkSelecting)
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Delete button
+                                        GestureDetector(
+                                          onTap: () => _deleteTask(index),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(8),
+                                            child: const Icon(
+                                              Icons.delete_outline,
+                                              color: Colors.red,
+                                              size: 20,
                                             ),
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                        // Drag handle (only show when reordering is available)
+                                        if (_currentFilter == TaskFilter.all && _searchQuery.isEmpty)
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            child: Icon(
+                                              Icons.reorder,
+                                              color: colorScheme.onSurface.withOpacity(0.5),
+                                              size: 20,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
                                   ],
                                 ),
                               ),
@@ -1249,6 +1639,47 @@ class _TodoHomePageState extends State<TodoHomePage> {
                     },
                   ),
           ),
+
+          // Bulk Actions Bar (shows when tasks are selected)
+          if (_isBulkSelecting && _selectedTaskIds.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                border: Border(
+                  top: BorderSide(color: Colors.blue.withOpacity(0.3)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: _selectAllTasks,
+                          icon: const Icon(Icons.select_all, size: 18),
+                          label: const Text('All'),
+                          style: TextButton.styleFrom(foregroundColor: Colors.blue),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton.icon(
+                          onPressed: _bulkCompleteSelected,
+                          icon: const Icon(Icons.check_circle, size: 18),
+                          label: const Text('Complete'),
+                          style: TextButton.styleFrom(foregroundColor: Colors.green),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _bulkDeleteSelected,
+                    icon: const Icon(Icons.delete, size: 18),
+                    label: const Text('Delete'),
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  ),
+                ],
+              ),
+            ),
 
           // Bottom Stats and Filter Section
           Container(

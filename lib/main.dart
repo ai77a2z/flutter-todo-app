@@ -94,12 +94,35 @@ class Task {
   String title;
   bool isCompleted;
   TaskCategory category;
+  DateTime? dueDate;
   
   Task({
     required this.title, 
     this.isCompleted = false,
     this.category = TaskCategory.personal,
+    this.dueDate,
   });
+
+  // Helper methods for due date status
+  bool get isOverdue {
+    if (dueDate == null || isCompleted) return false;
+    return dueDate!.isBefore(DateTime.now().subtract(const Duration(days: 1)));
+  }
+
+  bool get isDueToday {
+    if (dueDate == null) return false;
+    final now = DateTime.now();
+    return dueDate!.year == now.year && 
+           dueDate!.month == now.month && 
+           dueDate!.day == now.day;
+  }
+
+  bool get isDueSoon {
+    if (dueDate == null || isCompleted) return false;
+    final now = DateTime.now();
+    final difference = dueDate!.difference(now).inDays;
+    return difference >= 0 && difference <= 3;
+  }
 
   // Convert Task to JSON
   Map<String, dynamic> toJson() {
@@ -107,6 +130,7 @@ class Task {
       'title': title,
       'isCompleted': isCompleted,
       'category': category.name,
+      'dueDate': dueDate?.millisecondsSinceEpoch,
     };
   }
 
@@ -119,6 +143,9 @@ class Task {
         (e) => e.name == json['category'],
         orElse: () => TaskCategory.personal,
       ),
+      dueDate: json['dueDate'] != null 
+          ? DateTime.fromMillisecondsSinceEpoch(json['dueDate'])
+          : null,
     );
   }
 }
@@ -137,6 +164,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
   final List<Task> _tasks = [];
   TaskFilter _currentFilter = TaskFilter.all;
   TaskCategory _selectedCategory = TaskCategory.personal;
+  DateTime? _selectedDueDate;
   int? _editingTaskIndex; // Track which task is being edited
 
   @override
@@ -185,13 +213,75 @@ class _TodoHomePageState extends State<TodoHomePage> {
   void _addTask() {
     if (_taskController.text.trim().isNotEmpty) {
       setState(() {
-        _tasks.add(Task(title: _taskController.text.trim(), category: _selectedCategory));
+        _tasks.add(Task(
+          title: _taskController.text.trim(), 
+          category: _selectedCategory,
+          dueDate: _selectedDueDate,
+        ));
         _taskController.clear();
+        _selectedDueDate = null; // Reset due date after adding
       });
       _saveTasks();
       // Refocus the input field after adding a task
       _taskFocusNode.requestFocus();
     }
+  }
+
+  Future<void> _selectDueDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDueDate ?? DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: Colors.blue,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    
+    if (picked != null) {
+      setState(() {
+        _selectedDueDate = picked;
+      });
+    }
+  }
+
+  void _clearDueDate() {
+    setState(() {
+      _selectedDueDate = null;
+    });
+  }
+
+  String _formatDueDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = date.difference(now).inDays;
+    
+    if (difference == 0) {
+      return 'Today';
+    } else if (difference == 1) {
+      return 'Tomorrow';
+    } else if (difference == -1) {
+      return 'Yesterday';
+    } else if (difference < -1) {
+      return '${difference.abs()} days ago';
+    } else {
+      return 'In $difference days';
+    }
+  }
+
+  Color _getDueDateColor(Task task) {
+    if (task.dueDate == null || task.isCompleted) return Colors.grey;
+    
+    if (task.isOverdue) return Colors.red;
+    if (task.isDueToday) return Colors.orange;
+    if (task.isDueSoon) return Colors.blue;
+    return Colors.grey;
   }
 
   void _toggleTask(int index) {
@@ -388,6 +478,77 @@ class _TodoHomePageState extends State<TodoHomePage> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                // Due Date Selection Row
+                Row(
+                  children: [
+                    const Text(
+                      'Due Date:',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: _selectDueDate,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: _selectedDueDate != null 
+                                  ? Colors.blue.withOpacity(0.1)
+                                  : Colors.grey.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: _selectedDueDate != null 
+                                    ? Colors.blue.withOpacity(0.3)
+                                    : Colors.grey.withOpacity(0.3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.calendar_today,
+                                  size: 16,
+                                  color: _selectedDueDate != null ? Colors.blue : Colors.grey,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _selectedDueDate != null 
+                                        ? _formatDueDate(_selectedDueDate!)
+                                        : 'No due date',
+                                    style: TextStyle(
+                                      color: _selectedDueDate != null ? Colors.blue : Colors.grey,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                                if (_selectedDueDate != null)
+                                  GestureDetector(
+                                    onTap: _clearDueDate,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(2),
+                                      child: const Icon(
+                                        Icons.close,
+                                        size: 14,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -511,36 +672,79 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                                 ),
                                               ),
                                         const SizedBox(height: 4),
-                                        // Category Chip
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: task.category.color.withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(
-                                              color: task.category.color.withOpacity(0.3),
-                                              width: 1,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                task.category.icon,
-                                                size: 12,
-                                                color: task.category.color,
+                                        // Category and Due Date Row
+                                        Row(
+                                          children: [
+                                            // Category Chip
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: task.category.color.withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: task.category.color.withOpacity(0.3),
+                                                  width: 1,
+                                                ),
                                               ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                task.category.displayName,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: task.category.color,
-                                                  fontWeight: FontWeight.w500,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    task.category.icon,
+                                                    size: 12,
+                                                    color: task.category.color,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    task.category.displayName,
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: task.category.color,
+                                                      fontWeight: FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            // Due Date Chip
+                                            if (task.dueDate != null) ...[
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: _getDueDateColor(task).withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(12),
+                                                  border: Border.all(
+                                                    color: _getDueDateColor(task).withOpacity(0.3),
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      task.isOverdue 
+                                                          ? Icons.warning 
+                                                          : task.isDueToday 
+                                                              ? Icons.today 
+                                                              : Icons.schedule,
+                                                      size: 12,
+                                                      color: _getDueDateColor(task),
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      _formatDueDate(task.dueDate!),
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: _getDueDateColor(task),
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
                                             ],
-                                          ),
+                                          ],
                                         ),
                                       ],
                                     ),

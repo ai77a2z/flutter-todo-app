@@ -35,6 +35,60 @@ enum TaskCategory {
   other 
 }
 
+// Task priority enum
+enum TaskPriority {
+  low,
+  medium, 
+  high
+}
+
+// Extension to get priority properties
+extension TaskPriorityExtension on TaskPriority {
+  String get displayName {
+    switch (this) {
+      case TaskPriority.low:
+        return 'Low';
+      case TaskPriority.medium:
+        return 'Medium';
+      case TaskPriority.high:
+        return 'High';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case TaskPriority.low:
+        return Colors.green;
+      case TaskPriority.medium:
+        return Colors.orange;
+      case TaskPriority.high:
+        return Colors.red;
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case TaskPriority.low:
+        return Icons.arrow_downward;
+      case TaskPriority.medium:
+        return Icons.remove;
+      case TaskPriority.high:
+        return Icons.arrow_upward;
+    }
+  }
+
+  int get sortOrder {
+    switch (this) {
+      case TaskPriority.high:
+        return 3;
+      case TaskPriority.medium:
+        return 2;
+      case TaskPriority.low:
+        return 1;
+    }
+  }
+}
+
 // Extension to get category properties
 extension TaskCategoryExtension on TaskCategory {
   String get displayName {
@@ -94,12 +148,14 @@ class Task {
   String title;
   bool isCompleted;
   TaskCategory category;
+  TaskPriority priority;
   DateTime? dueDate;
   
   Task({
     required this.title, 
     this.isCompleted = false,
     this.category = TaskCategory.personal,
+    this.priority = TaskPriority.medium,
     this.dueDate,
   });
 
@@ -130,6 +186,7 @@ class Task {
       'title': title,
       'isCompleted': isCompleted,
       'category': category.name,
+      'priority': priority.name,
       'dueDate': dueDate?.millisecondsSinceEpoch,
     };
   }
@@ -142,6 +199,10 @@ class Task {
       category: TaskCategory.values.firstWhere(
         (e) => e.name == json['category'],
         orElse: () => TaskCategory.personal,
+      ),
+      priority: TaskPriority.values.firstWhere(
+        (e) => e.name == json['priority'],
+        orElse: () => TaskPriority.medium,
       ),
       dueDate: json['dueDate'] != null 
           ? DateTime.fromMillisecondsSinceEpoch(json['dueDate'])
@@ -164,6 +225,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
   final List<Task> _tasks = [];
   TaskFilter _currentFilter = TaskFilter.all;
   TaskCategory _selectedCategory = TaskCategory.personal;
+  TaskPriority _selectedPriority = TaskPriority.medium;
   DateTime? _selectedDueDate;
   int? _editingTaskIndex; // Track which task is being edited
 
@@ -179,15 +241,45 @@ class _TodoHomePageState extends State<TodoHomePage> {
 
   // Get filtered tasks based on current filter
   List<Task> get _filteredTasks {
+    List<Task> filtered;
     switch (_currentFilter) {
       case TaskFilter.active:
-        return _tasks.where((task) => !task.isCompleted).toList();
+        filtered = _tasks.where((task) => !task.isCompleted).toList();
+        break;
       case TaskFilter.completed:
-        return _tasks.where((task) => task.isCompleted).toList();
+        filtered = _tasks.where((task) => task.isCompleted).toList();
+        break;
       case TaskFilter.all:
       default:
-        return _tasks;
+        filtered = _tasks;
+        break;
     }
+    
+    // Sort by priority (high to low) and then by due date
+    filtered.sort((a, b) {
+      // First sort by completion status (incomplete tasks first)
+      if (a.isCompleted != b.isCompleted) {
+        return a.isCompleted ? 1 : -1;
+      }
+      
+      // Then sort by priority (high to low)
+      if (a.priority.sortOrder != b.priority.sortOrder) {
+        return b.priority.sortOrder.compareTo(a.priority.sortOrder);
+      }
+      
+      // Finally sort by due date (closest first)
+      if (a.dueDate != null && b.dueDate != null) {
+        return a.dueDate!.compareTo(b.dueDate!);
+      } else if (a.dueDate != null) {
+        return -1; // Tasks with due dates come first
+      } else if (b.dueDate != null) {
+        return 1;
+      }
+      
+      return 0;
+    });
+    
+    return filtered;
   }
 
   // Load tasks from SharedPreferences
@@ -216,6 +308,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
         _tasks.add(Task(
           title: _taskController.text.trim(), 
           category: _selectedCategory,
+          priority: _selectedPriority,
           dueDate: _selectedDueDate,
         ));
         _taskController.clear();
@@ -479,6 +572,65 @@ class _TodoHomePageState extends State<TodoHomePage> {
                   ],
                 ),
                 const SizedBox(height: 8),
+                // Priority Selection Row
+                Row(
+                  children: [
+                    const Text(
+                      'Priority:',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _selectedPriority.color.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _selectedPriority.color.withOpacity(0.3),
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<TaskPriority>(
+                            value: _selectedPriority,
+                            isExpanded: true,
+                            icon: Icon(Icons.arrow_drop_down, color: _selectedPriority.color),
+                            style: TextStyle(color: _selectedPriority.color, fontSize: 14),
+                            onChanged: (TaskPriority? newValue) {
+                              if (newValue != null) {
+                                setState(() {
+                                  _selectedPriority = newValue;
+                                });
+                              }
+                            },
+                            items: TaskPriority.values.map<DropdownMenuItem<TaskPriority>>((TaskPriority priority) {
+                              return DropdownMenuItem<TaskPriority>(
+                                value: priority,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      priority.icon,
+                                      size: 16,
+                                      color: priority.color,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(priority.displayName),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 // Due Date Selection Row
                 Row(
                   children: [
@@ -672,9 +824,42 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                                 ),
                                               ),
                                         const SizedBox(height: 4),
-                                        // Category and Due Date Row
-                                        Row(
+                                        // Category, Priority, and Due Date Row
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: 4,
                                           children: [
+                                            // Priority Chip (shown first for importance)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: task.priority.color.withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: task.priority.color.withOpacity(0.3),
+                                                  width: 1,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    task.priority.icon,
+                                                    size: 12,
+                                                    color: task.priority.color,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    task.priority.displayName,
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: task.priority.color,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
                                             // Category Chip
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -707,8 +892,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                               ),
                                             ),
                                             // Due Date Chip
-                                            if (task.dueDate != null) ...[
-                                              const SizedBox(width: 8),
+                                            if (task.dueDate != null)
                                               Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                                 decoration: BoxDecoration(
@@ -743,7 +927,6 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                                   ],
                                                 ),
                                               ),
-                                            ],
                                           ],
                                         ),
                                       ],

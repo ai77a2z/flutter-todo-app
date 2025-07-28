@@ -133,6 +133,7 @@ class TodoHomePage extends StatefulWidget {
 class _TodoHomePageState extends State<TodoHomePage> {
   final TextEditingController _taskController = TextEditingController();
   final TextEditingController _editController = TextEditingController();
+  final FocusNode _taskFocusNode = FocusNode();
   final List<Task> _tasks = [];
   TaskFilter _currentFilter = TaskFilter.all;
   TaskCategory _selectedCategory = TaskCategory.personal;
@@ -142,6 +143,10 @@ class _TodoHomePageState extends State<TodoHomePage> {
   void initState() {
     super.initState();
     _loadTasks();
+    // Ensure focus after the widget is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _taskFocusNode.requestFocus();
+    });
   }
 
   // Get filtered tasks based on current filter
@@ -184,6 +189,8 @@ class _TodoHomePageState extends State<TodoHomePage> {
         _taskController.clear();
       });
       _saveTasks();
+      // Refocus the input field after adding a task
+      _taskFocusNode.requestFocus();
     }
   }
 
@@ -298,7 +305,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
                     Expanded(
                       child: TextField(
                         controller: _taskController,
-                        autofocus: true,
+                        focusNode: _taskFocusNode,
                         decoration: const InputDecoration(
                           hintText: 'Add a new task...',
                           border: InputBorder.none,
@@ -443,97 +450,146 @@ class _TodoHomePageState extends State<TodoHomePage> {
                             ),
                           ],
                         ),
-                        child: ListTile(
-                          leading: Checkbox(
-                            value: task.isCompleted,
-                            onChanged: (_) => _toggleTask(index),
-                            activeColor: Colors.green,
-                          ),
-                          title: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _editingTaskIndex == index
-                                  ? TextField(
-                                      controller: _editController,
-                                      autofocus: true,
-                                      decoration: const InputDecoration(
-                                        border: OutlineInputBorder(),
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: _editingTaskIndex == index ? null : () => _startEditingTask(index),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  // Checkbox
+                                  GestureDetector(
+                                    onTap: () => _toggleTask(index),
+                                    child: Container(
+                                      width: 24,
+                                      height: 24,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: task.isCompleted ? Colors.green : Colors.grey,
+                                          width: 2,
+                                        ),
+                                        color: task.isCompleted ? Colors.green : Colors.transparent,
                                       ),
-                                      onSubmitted: (_) => _saveEditedTask(),
+                                      child: task.isCompleted
+                                          ? const Icon(
+                                              Icons.check,
+                                              size: 16,
+                                              color: Colors.white,
+                                            )
+                                          : null,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Task content
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        _editingTaskIndex == index
+                                            ? TextField(
+                                                controller: _editController,
+                                                autofocus: true,
+                                                decoration: const InputDecoration(
+                                                  border: OutlineInputBorder(),
+                                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                ),
+                                                onSubmitted: (_) => _saveEditedTask(),
+                                              )
+                                            : Text(
+                                                task.title,
+                                                style: TextStyle(
+                                                  decoration: task.isCompleted
+                                                      ? TextDecoration.lineThrough
+                                                      : TextDecoration.none,
+                                                  color: task.isCompleted
+                                                      ? Colors.grey
+                                                      : Colors.black87,
+                                                  fontSize: 16,
+                                                ),
+                                              ),
+                                        const SizedBox(height: 4),
+                                        // Category Chip
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: task.category.color.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: task.category.color.withOpacity(0.3),
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                task.category.icon,
+                                                size: 12,
+                                                color: task.category.color,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                task.category.displayName,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: task.category.color,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // Action buttons
+                                  if (_editingTaskIndex == index)
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        GestureDetector(
+                                          onTap: _saveEditedTask,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(8),
+                                            child: const Icon(
+                                              Icons.check,
+                                              color: Colors.green,
+                                              size: 20,
+                                            ),
+                                          ),
+                                        ),
+                                        GestureDetector(
+                                          onTap: _cancelEditing,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(8),
+                                            child: const Icon(
+                                              Icons.close,
+                                              color: Colors.red,
+                                              size: 20,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     )
-                                  : GestureDetector(
-                                      onTap: () => _startEditingTask(index),
-                                      child: Text(
-                                        task.title,
-                                        style: TextStyle(
-                                          decoration: task.isCompleted
-                                              ? TextDecoration.lineThrough
-                                              : TextDecoration.none,
-                                          color: task.isCompleted
-                                              ? Colors.grey
-                                              : Colors.black87,
-                                          fontSize: 16,
+                                  else
+                                    GestureDetector(
+                                      onTap: () => _deleteTask(index),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        child: const Icon(
+                                          Icons.delete_outline,
+                                          color: Colors.red,
+                                          size: 20,
                                         ),
                                       ),
                                     ),
-                              const SizedBox(height: 4),
-                              // Category Chip
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: task.category.color.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: task.category.color.withOpacity(0.3),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      task.category.icon,
-                                      size: 12,
-                                      color: task.category.color,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      task.category.displayName,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: task.category.color,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
-                          trailing: _editingTaskIndex == index
-                              ? Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.check),
-                                      color: Colors.green,
-                                      onPressed: _saveEditedTask,
-                                      tooltip: 'Save',
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.close),
-                                      color: Colors.red,
-                                      onPressed: _cancelEditing,
-                                      tooltip: 'Cancel',
-                                    ),
-                                  ],
-                                )
-                              : IconButton(
-                                  icon: const Icon(Icons.delete_outline),
-                                  color: Colors.red,
-                                  onPressed: () => _deleteTask(index),
-                                ),
                         ),
                       );
                     },
@@ -588,21 +644,25 @@ class _TodoHomePageState extends State<TodoHomePage> {
                     children: TaskFilter.values.map((filter) {
                       final isSelected = _currentFilter == filter;
                       return Expanded(
-                        child: GestureDetector(
-                          onTap: () => _setFilter(filter),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            decoration: BoxDecoration(
-                              color: isSelected ? Colors.blue : Colors.transparent,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              _getFilterDisplayName(filter),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: isSelected ? Colors.white : Colors.grey[600],
-                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                                fontSize: 14,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(6),
+                            onTap: () => _setFilter(filter),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: isSelected ? Colors.blue : Colors.transparent,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                _getFilterDisplayName(filter),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: isSelected ? Colors.white : Colors.grey[600],
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                  fontSize: 14,
+                                ),
                               ),
                             ),
                           ),
@@ -623,6 +683,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
   void dispose() {
     _taskController.dispose();
     _editController.dispose();
+    _taskFocusNode.dispose();
     super.dispose();
   }
 }

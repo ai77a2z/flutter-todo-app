@@ -425,6 +425,27 @@ class _TodoHomePageState extends State<TodoHomePage> {
     return Colors.grey;
   }
 
+  Future<bool> _showDeleteConfirmation(BuildContext context, String taskTitle) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Task'),
+        content: Text('Are you sure you want to delete "$taskTitle"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
   void _toggleTask(int index) {
     // Find the actual task in the main list
     final task = _filteredTasks[index];
@@ -809,157 +830,158 @@ class _TodoHomePageState extends State<TodoHomePage> {
                     itemCount: _filteredTasks.length,
                     itemBuilder: (context, index) {
                       final task = _filteredTasks[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: colorScheme.shadow.withOpacity(0.1),
-                              spreadRadius: 1,
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
+                      return Dismissible(
+                        key: Key(task.title + index.toString()),
+                        background: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: task.isCompleted ? Colors.orange : Colors.green,
                             borderRadius: BorderRadius.circular(8),
-                            onTap: _editingTaskIndex == index ? null : () => _startEditingTask(index),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  // Checkbox
-                                  GestureDetector(
-                                    onTap: () => _toggleTask(index),
-                                    child: Container(
-                                      width: 24,
-                                      height: 24,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: task.isCompleted ? Colors.green : Colors.grey,
-                                          width: 2,
+                          ),
+                          alignment: Alignment.centerLeft,
+                          padding: const EdgeInsets.only(left: 20),
+                          child: Row(
+                            children: [
+                              Icon(
+                                task.isCompleted ? Icons.undo : Icons.check, 
+                                color: Colors.white, 
+                                size: 24
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                task.isCompleted ? 'Uncomplete' : 'Complete',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        secondaryBackground: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Text(
+                                'Delete',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Icon(Icons.delete, color: Colors.white, size: 24),
+                            ],
+                          ),
+                        ),
+                        confirmDismiss: (direction) async {
+                          if (direction == DismissDirection.startToEnd) {
+                            // Swipe right to complete/uncomplete
+                            _toggleTask(index);
+                            return false; // Don't dismiss, just toggle
+                          } else if (direction == DismissDirection.endToStart) {
+                            // Swipe left to delete
+                            return await _showDeleteConfirmation(context, task.title);
+                          }
+                          return false;
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: colorScheme.shadow.withOpacity(0.1),
+                                spreadRadius: 1,
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: _editingTaskIndex == index ? null : () => _startEditingTask(index),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  children: [
+                                    // Checkbox
+                                    GestureDetector(
+                                      onTap: () => _toggleTask(index),
+                                      child: Container(
+                                        width: 24,
+                                        height: 24,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: task.isCompleted ? Colors.green : Colors.grey,
+                                            width: 2,
+                                          ),
+                                          color: task.isCompleted ? Colors.green : Colors.transparent,
                                         ),
-                                        color: task.isCompleted ? Colors.green : Colors.transparent,
-                                      ),
-                                      child: task.isCompleted
-                                          ? const Icon(
-                                              Icons.check,
-                                              size: 16,
-                                              color: Colors.white,
-                                            )
-                                          : null,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  // Task content
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        _editingTaskIndex == index
-                                            ? TextField(
-                                                controller: _editController,
-                                                autofocus: true,
-                                                decoration: const InputDecoration(
-                                                  border: OutlineInputBorder(),
-                                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                ),
-                                                onSubmitted: (_) => _saveEditedTask(),
+                                        child: task.isCompleted
+                                            ? const Icon(
+                                                Icons.check,
+                                                size: 16,
+                                                color: Colors.white,
                                               )
-                                            : Text(
-                                                task.title,
-                                                style: TextStyle(
-                                                  decoration: task.isCompleted
-                                                      ? TextDecoration.lineThrough
-                                                      : TextDecoration.none,
-                                                  color: task.isCompleted
-                                                      ? colorScheme.onSurface.withOpacity(0.6)
-                                                      : colorScheme.onSurface,
-                                                  fontSize: 16,
+                                            : null,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    // Task content
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          _editingTaskIndex == index
+                                              ? TextField(
+                                                  controller: _editController,
+                                                  autofocus: true,
+                                                  decoration: const InputDecoration(
+                                                    border: OutlineInputBorder(),
+                                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                  ),
+                                                  onSubmitted: (_) => _saveEditedTask(),
+                                                )
+                                              : Text(
+                                                  task.title,
+                                                  style: TextStyle(
+                                                    decoration: task.isCompleted
+                                                        ? TextDecoration.lineThrough
+                                                        : TextDecoration.none,
+                                                    color: task.isCompleted
+                                                        ? colorScheme.onSurface.withOpacity(0.6)
+                                                        : colorScheme.onSurface,
+                                                    fontSize: 16,
+                                                  ),
                                                 ),
-                                              ),
-                                        const SizedBox(height: 4),
-                                        // Category, Priority, and Due Date Row
-                                        Wrap(
-                                          spacing: 6,
-                                          runSpacing: 4,
-                                          children: [
-                                            // Priority Chip (shown first for importance)
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: task.priority.color.withOpacity(0.1),
-                                                borderRadius: BorderRadius.circular(12),
-                                                border: Border.all(
-                                                  color: task.priority.color.withOpacity(0.3),
-                                                  width: 1,
-                                                ),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    task.priority.icon,
-                                                    size: 12,
-                                                    color: task.priority.color,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    task.priority.displayName,
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      color: task.priority.color,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            // Category Chip
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: task.category.color.withOpacity(0.1),
-                                                borderRadius: BorderRadius.circular(12),
-                                                border: Border.all(
-                                                  color: task.category.color.withOpacity(0.3),
-                                                  width: 1,
-                                                ),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    task.category.icon,
-                                                    size: 12,
-                                                    color: task.category.color,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    task.category.displayName,
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      color: task.category.color,
-                                                      fontWeight: FontWeight.w500,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            // Due Date Chip
-                                            if (task.dueDate != null)
+                                          const SizedBox(height: 4),
+                                          // Category, Priority, and Due Date Row
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: 4,
+                                            children: [
+                                              // Priority Chip (shown first for importance)
                                               Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                                 decoration: BoxDecoration(
-                                                  color: _getDueDateColor(task).withOpacity(0.1),
+                                                  color: task.priority.color.withOpacity(0.1),
                                                   borderRadius: BorderRadius.circular(12),
                                                   border: Border.all(
-                                                    color: _getDueDateColor(task).withOpacity(0.3),
+                                                    color: task.priority.color.withOpacity(0.3),
                                                     width: 1,
                                                   ),
                                                 ),
@@ -967,73 +989,137 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
                                                     Icon(
-                                                      task.isOverdue 
-                                                          ? Icons.warning 
-                                                          : task.isDueToday 
-                                                              ? Icons.today 
-                                                              : Icons.schedule,
+                                                      task.priority.icon,
                                                       size: 12,
-                                                      color: _getDueDateColor(task),
+                                                      color: task.priority.color,
                                                     ),
                                                     const SizedBox(width: 4),
                                                     Text(
-                                                      _formatDueDate(task.dueDate!),
+                                                      task.priority.displayName,
                                                       style: TextStyle(
                                                         fontSize: 11,
-                                                        color: _getDueDateColor(task),
+                                                        color: task.priority.color,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              // Category Chip
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: task.category.color.withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(12),
+                                                  border: Border.all(
+                                                    color: task.category.color.withOpacity(0.3),
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      task.category.icon,
+                                                      size: 12,
+                                                      color: task.category.color,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      task.category.displayName,
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: task.category.color,
                                                         fontWeight: FontWeight.w500,
                                                       ),
                                                     ),
                                                   ],
                                                 ),
                                               ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  // Action buttons
-                                  if (_editingTaskIndex == index)
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        GestureDetector(
-                                          onTap: _saveEditedTask,
-                                          child: Container(
-                                            padding: const EdgeInsets.all(8),
-                                            child: const Icon(
-                                              Icons.check,
-                                              color: Colors.green,
-                                              size: 20,
-                                            ),
+                                              // Due Date Chip
+                                              if (task.dueDate != null)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: _getDueDateColor(task).withOpacity(0.1),
+                                                    borderRadius: BorderRadius.circular(12),
+                                                    border: Border.all(
+                                                      color: _getDueDateColor(task).withOpacity(0.3),
+                                                      width: 1,
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        task.isOverdue 
+                                                            ? Icons.warning 
+                                                            : task.isDueToday 
+                                                                ? Icons.today 
+                                                                : Icons.schedule,
+                                                        size: 12,
+                                                        color: _getDueDateColor(task),
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        _formatDueDate(task.dueDate!),
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: _getDueDateColor(task),
+                                                          fontWeight: FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                            ],
                                           ),
-                                        ),
-                                        GestureDetector(
-                                          onTap: _cancelEditing,
-                                          child: Container(
-                                            padding: const EdgeInsets.all(8),
-                                            child: const Icon(
-                                              Icons.close,
-                                              color: Colors.red,
-                                              size: 20,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  else
-                                    GestureDetector(
-                                      onTap: () => _deleteTask(index),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(8),
-                                        child: const Icon(
-                                          Icons.delete_outline,
-                                          color: Colors.red,
-                                          size: 20,
-                                        ),
+                                        ],
                                       ),
                                     ),
-                                ],
+                                    // Action buttons
+                                    if (_editingTaskIndex == index)
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          GestureDetector(
+                                            onTap: _saveEditedTask,
+                                            child: Container(
+                                              padding: const EdgeInsets.all(8),
+                                              child: const Icon(
+                                                Icons.check,
+                                                color: Colors.green,
+                                                size: 20,
+                                              ),
+                                            ),
+                                          ),
+                                          GestureDetector(
+                                            onTap: _cancelEditing,
+                                            child: Container(
+                                              padding: const EdgeInsets.all(8),
+                                              child: const Icon(
+                                                Icons.close,
+                                                color: Colors.red,
+                                                size: 20,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    else
+                                      GestureDetector(
+                                        onTap: () => _deleteTask(index),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(8),
+                                          child: const Icon(
+                                            Icons.delete_outline,
+                                            color: Colors.red,
+                                            size: 20,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),

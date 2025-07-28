@@ -1150,6 +1150,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
                 : ReorderableListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: _filteredTasks.length,
+                    buildDefaultDragHandles: false,
                     onReorder: _handleReorder,
                     itemBuilder: (context, index) {
                       final task = _filteredTasks[index];
@@ -1619,12 +1620,15 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                         ),
                                         // Drag handle (only show when reordering is available)
                                         if (_currentFilter == TaskFilter.all && _searchQuery.isEmpty)
-                                          Container(
-                                            padding: const EdgeInsets.all(8),
-                                            child: Icon(
-                                              Icons.drag_indicator,
-                                              color: colorScheme.onSurface.withOpacity(0.5),
-                                              size: 20,
+                                          ReorderableDragStartListener(
+                                            index: index,
+                                            child: Container(
+                                              padding: const EdgeInsets.all(8),
+                                              child: Icon(
+                                                Icons.drag_indicator,
+                                                color: colorScheme.onSurface.withOpacity(0.5),
+                                                size: 20,
+                                              ),
                                             ),
                                           ),
                                       ],

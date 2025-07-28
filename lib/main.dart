@@ -314,29 +314,33 @@ class _TodoHomePageState extends State<TodoHomePage> {
       }).toList();
     }
     
-    // Sort by priority (high to low) and then by due date
-    filtered.sort((a, b) {
-      // First sort by completion status (incomplete tasks first)
-      if (a.isCompleted != b.isCompleted) {
-        return a.isCompleted ? 1 : -1;
-      }
-      
-      // Then sort by priority (high to low)
-      if (a.priority.sortOrder != b.priority.sortOrder) {
-        return b.priority.sortOrder.compareTo(a.priority.sortOrder);
-      }
-      
-      // Finally sort by due date (closest first)
-      if (a.dueDate != null && b.dueDate != null) {
-        return a.dueDate!.compareTo(b.dueDate!);
-      } else if (a.dueDate != null) {
-        return -1; // Tasks with due dates come first
-      } else if (b.dueDate != null) {
-        return 1;
-      }
-      
-      return 0;
-    });
+    // Only apply automatic sorting when filters or search are active
+    // This preserves custom user ordering when viewing all tasks
+    if (_currentFilter != TaskFilter.all || _searchQuery.isNotEmpty) {
+      // Sort by priority (high to low) and then by due date
+      filtered.sort((a, b) {
+        // First sort by completion status (incomplete tasks first)
+        if (a.isCompleted != b.isCompleted) {
+          return a.isCompleted ? 1 : -1;
+        }
+        
+        // Then sort by priority (high to low)
+        if (a.priority.sortOrder != b.priority.sortOrder) {
+          return b.priority.sortOrder.compareTo(a.priority.sortOrder);
+        }
+        
+        // Finally sort by due date (closest first)
+        if (a.dueDate != null && b.dueDate != null) {
+          return a.dueDate!.compareTo(b.dueDate!);
+        } else if (a.dueDate != null) {
+          return -1; // Tasks with due dates come first
+        } else if (b.dueDate != null) {
+          return 1;
+        }
+        
+        return 0;
+      });
+    }
     
     return filtered;
   }
@@ -548,6 +552,45 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 
   int get _remainingTasks => _tasks.where((task) => !task.isCompleted).length;
+
+  // Helper to reorder tasks in the main _tasks list
+  void _reorderTasksInMainList() {
+    // This is a complex operation when filtering is active
+    // For now, we'll only allow reordering when no filters are active
+    if (_currentFilter != TaskFilter.all || _searchQuery.isNotEmpty) {
+      return; // Don't reorder when filters are active
+    }
+    
+    // Simple case: reorder the main tasks list directly
+    final List<Task> newOrder = List.from(_filteredTasks);
+    setState(() {
+      _tasks.clear();
+      _tasks.addAll(newOrder);
+    });
+  }
+
+  void _handleReorder(int oldIndex, int newIndex) {
+    // Only allow reordering when showing all tasks without search
+    if (_currentFilter != TaskFilter.all || _searchQuery.isNotEmpty) {
+      // Show a message that reordering is only available for all tasks
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Reordering is only available when viewing all tasks'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      if (oldIndex < newIndex) {
+        newIndex -= 1;
+      }
+      final task = _tasks.removeAt(oldIndex);
+      _tasks.insert(newIndex, task);
+    });
+    _saveTasks();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -886,13 +929,14 @@ class _TodoHomePageState extends State<TodoHomePage> {
                       ],
                     ),
                   )
-                : ListView.builder(
+                : ReorderableListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: _filteredTasks.length,
+                    onReorder: _handleReorder,
                     itemBuilder: (context, index) {
                       final task = _filteredTasks[index];
                       return Dismissible(
-                        key: Key(task.title + index.toString()),
+                        key: Key('${task.title}_${task.hashCode}'),
                         background: Container(
                           margin: const EdgeInsets.only(bottom: 8),
                           decoration: BoxDecoration(
@@ -1168,16 +1212,32 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                         ],
                                       )
                                     else
-                                      GestureDetector(
-                                        onTap: () => _deleteTask(index),
-                                        child: Container(
-                                          padding: const EdgeInsets.all(8),
-                                          child: const Icon(
-                                            Icons.delete_outline,
-                                            color: Colors.red,
-                                            size: 20,
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          // Drag handle (only show when reordering is available)
+                                          if (_currentFilter == TaskFilter.all && _searchQuery.isEmpty)
+                                            Container(
+                                              padding: const EdgeInsets.all(8),
+                                              child: Icon(
+                                                Icons.drag_handle,
+                                                color: colorScheme.onSurface.withOpacity(0.5),
+                                                size: 20,
+                                              ),
+                                            ),
+                                          // Delete button
+                                          GestureDetector(
+                                            onTap: () => _deleteTask(index),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(8),
+                                              child: const Icon(
+                                                Icons.delete_outline,
+                                                color: Colors.red,
+                                                size: 20,
+                                              ),
+                                            ),
                                           ),
-                                        ),
+                                        ],
                                       ),
                                   ],
                                 ),

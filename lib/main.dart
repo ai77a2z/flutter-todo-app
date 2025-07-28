@@ -22,18 +22,91 @@ class TodoApp extends StatelessWidget {
   }
 }
 
+// Filter enum for task filtering
+enum TaskFilter { all, active, completed }
+
+// Task category enum
+enum TaskCategory { 
+  personal, 
+  work, 
+  shopping, 
+  health, 
+  finance,
+  other 
+}
+
+// Extension to get category properties
+extension TaskCategoryExtension on TaskCategory {
+  String get displayName {
+    switch (this) {
+      case TaskCategory.personal:
+        return 'Personal';
+      case TaskCategory.work:
+        return 'Work';
+      case TaskCategory.shopping:
+        return 'Shopping';
+      case TaskCategory.health:
+        return 'Health';
+      case TaskCategory.finance:
+        return 'Finance';
+      case TaskCategory.other:
+        return 'Other';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case TaskCategory.personal:
+        return Colors.blue;
+      case TaskCategory.work:
+        return Colors.orange;
+      case TaskCategory.shopping:
+        return Colors.green;
+      case TaskCategory.health:
+        return Colors.red;
+      case TaskCategory.finance:
+        return Colors.purple;
+      case TaskCategory.other:
+        return Colors.grey;
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case TaskCategory.personal:
+        return Icons.person;
+      case TaskCategory.work:
+        return Icons.work;
+      case TaskCategory.shopping:
+        return Icons.shopping_cart;
+      case TaskCategory.health:
+        return Icons.favorite;
+      case TaskCategory.finance:
+        return Icons.attach_money;
+      case TaskCategory.other:
+        return Icons.label;
+    }
+  }
+}
+
 // Task model
 class Task {
   String title;
   bool isCompleted;
+  TaskCategory category;
   
-  Task({required this.title, this.isCompleted = false});
+  Task({
+    required this.title, 
+    this.isCompleted = false,
+    this.category = TaskCategory.personal,
+  });
 
   // Convert Task to JSON
   Map<String, dynamic> toJson() {
     return {
       'title': title,
       'isCompleted': isCompleted,
+      'category': category.name,
     };
   }
 
@@ -42,6 +115,10 @@ class Task {
     return Task(
       title: json['title'],
       isCompleted: json['isCompleted'],
+      category: TaskCategory.values.firstWhere(
+        (e) => e.name == json['category'],
+        orElse: () => TaskCategory.personal,
+      ),
     );
   }
 }
@@ -55,12 +132,29 @@ class TodoHomePage extends StatefulWidget {
 
 class _TodoHomePageState extends State<TodoHomePage> {
   final TextEditingController _taskController = TextEditingController();
+  final TextEditingController _editController = TextEditingController();
   final List<Task> _tasks = [];
+  TaskFilter _currentFilter = TaskFilter.all;
+  TaskCategory _selectedCategory = TaskCategory.personal;
+  int? _editingTaskIndex; // Track which task is being edited
 
   @override
   void initState() {
     super.initState();
     _loadTasks();
+  }
+
+  // Get filtered tasks based on current filter
+  List<Task> get _filteredTasks {
+    switch (_currentFilter) {
+      case TaskFilter.active:
+        return _tasks.where((task) => !task.isCompleted).toList();
+      case TaskFilter.completed:
+        return _tasks.where((task) => task.isCompleted).toList();
+      case TaskFilter.all:
+      default:
+        return _tasks;
+    }
   }
 
   // Load tasks from SharedPreferences
@@ -86,7 +180,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
   void _addTask() {
     if (_taskController.text.trim().isNotEmpty) {
       setState(() {
-        _tasks.add(Task(title: _taskController.text.trim()));
+        _tasks.add(Task(title: _taskController.text.trim(), category: _selectedCategory));
         _taskController.clear();
       });
       _saveTasks();
@@ -94,17 +188,73 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 
   void _toggleTask(int index) {
+    // Find the actual task in the main list
+    final task = _filteredTasks[index];
+    final mainIndex = _tasks.indexOf(task);
+    
     setState(() {
-      _tasks[index].isCompleted = !_tasks[index].isCompleted;
+      _tasks[mainIndex].isCompleted = !_tasks[mainIndex].isCompleted;
     });
     _saveTasks();
   }
 
   void _deleteTask(int index) {
+    // Find the actual task in the main list
+    final task = _filteredTasks[index];
+    final mainIndex = _tasks.indexOf(task);
+    
     setState(() {
-      _tasks.removeAt(index);
+      _tasks.removeAt(mainIndex);
     });
     _saveTasks();
+  }
+
+  void _setFilter(TaskFilter filter) {
+    setState(() {
+      _currentFilter = filter;
+    });
+  }
+
+  void _startEditingTask(int index) {
+    final task = _filteredTasks[index];
+    setState(() {
+      _editingTaskIndex = index;
+      _editController.text = task.title;
+    });
+  }
+
+  void _saveEditedTask() {
+    if (_editingTaskIndex != null && _editController.text.trim().isNotEmpty) {
+      final task = _filteredTasks[_editingTaskIndex!];
+      final mainIndex = _tasks.indexOf(task);
+      
+      setState(() {
+        _tasks[mainIndex].title = _editController.text.trim();
+        _editingTaskIndex = null;
+        _editController.clear();
+      });
+      _saveTasks();
+    } else {
+      _cancelEditing();
+    }
+  }
+
+  void _cancelEditing() {
+    setState(() {
+      _editingTaskIndex = null;
+      _editController.clear();
+    });
+  }
+
+  String _getFilterDisplayName(TaskFilter filter) {
+    switch (filter) {
+      case TaskFilter.all:
+        return 'All';
+      case TaskFilter.active:
+        return 'Active';
+      case TaskFilter.completed:
+        return 'Completed';
+    }
   }
 
   int get _remainingTasks => _tasks.where((task) => !task.isCompleted).length;
@@ -140,31 +290,96 @@ class _TodoHomePageState extends State<TodoHomePage> {
                 ),
               ],
             ),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _taskController,
-                    decoration: const InputDecoration(
-                      hintText: 'Add a new task...',
-                      border: InputBorder.none,
-                      hintStyle: TextStyle(color: Colors.grey),
+                // Task Input Row
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _taskController,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          hintText: 'Add a new task...',
+                          border: InputBorder.none,
+                          hintStyle: TextStyle(color: Colors.grey),
+                        ),
+                        onSubmitted: (_) => _addTask(),
+                      ),
                     ),
-                    onSubmitted: (_) => _addTask(),
-                  ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: _addTask,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                      child: const Icon(Icons.add),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _addTask,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                const SizedBox(height: 8),
+                // Category Selection Row
+                Row(
+                  children: [
+                    const Text(
+                      'Category:',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
+                      ),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  ),
-                  child: const Icon(Icons.add),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _selectedCategory.color.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _selectedCategory.color.withOpacity(0.3),
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<TaskCategory>(
+                            value: _selectedCategory,
+                            isExpanded: true,
+                            icon: Icon(Icons.arrow_drop_down, color: _selectedCategory.color),
+                            style: TextStyle(color: _selectedCategory.color, fontSize: 14),
+                            onChanged: (TaskCategory? newValue) {
+                              if (newValue != null) {
+                                setState(() {
+                                  _selectedCategory = newValue;
+                                });
+                              }
+                            },
+                            items: TaskCategory.values.map<DropdownMenuItem<TaskCategory>>((TaskCategory category) {
+                              return DropdownMenuItem<TaskCategory>(
+                                value: category,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      category.icon,
+                                      size: 16,
+                                      color: category.color,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(category.displayName),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -172,28 +387,36 @@ class _TodoHomePageState extends State<TodoHomePage> {
 
           // Task List Section
           Expanded(
-            child: _tasks.isEmpty
-                ? const Center(
+            child: _filteredTasks.isEmpty
+                ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.check_circle_outline,
+                          _currentFilter == TaskFilter.completed 
+                              ? Icons.task_alt 
+                              : Icons.check_circle_outline,
                           size: 64,
                           color: Colors.grey,
                         ),
-                        SizedBox(height: 16),
+                        const SizedBox(height: 16),
                         Text(
-                          'No tasks yet!',
-                          style: TextStyle(
+                          _currentFilter == TaskFilter.completed 
+                              ? 'No completed tasks!'
+                              : _currentFilter == TaskFilter.active
+                                  ? 'No active tasks!'
+                                  : 'No tasks yet!',
+                          style: const TextStyle(
                             fontSize: 18,
                             color: Colors.grey,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         Text(
-                          'Add a task to get started',
-                          style: TextStyle(
+                          _currentFilter == TaskFilter.completed 
+                              ? 'Complete some tasks to see them here'
+                              : 'Add a task to get started',
+                          style: const TextStyle(
                             fontSize: 14,
                             color: Colors.grey,
                           ),
@@ -203,9 +426,9 @@ class _TodoHomePageState extends State<TodoHomePage> {
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _tasks.length,
+                    itemCount: _filteredTasks.length,
                     itemBuilder: (context, index) {
-                      final task = _tasks[index];
+                      final task = _filteredTasks[index];
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
@@ -226,30 +449,98 @@ class _TodoHomePageState extends State<TodoHomePage> {
                             onChanged: (_) => _toggleTask(index),
                             activeColor: Colors.green,
                           ),
-                          title: Text(
-                            task.title,
-                            style: TextStyle(
-                              decoration: task.isCompleted
-                                  ? TextDecoration.lineThrough
-                                  : TextDecoration.none,
-                              color: task.isCompleted
-                                  ? Colors.grey
-                                  : Colors.black87,
-                              fontSize: 16,
-                            ),
+                          title: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _editingTaskIndex == index
+                                  ? TextField(
+                                      controller: _editController,
+                                      autofocus: true,
+                                      decoration: const InputDecoration(
+                                        border: OutlineInputBorder(),
+                                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      ),
+                                      onSubmitted: (_) => _saveEditedTask(),
+                                    )
+                                  : GestureDetector(
+                                      onTap: () => _startEditingTask(index),
+                                      child: Text(
+                                        task.title,
+                                        style: TextStyle(
+                                          decoration: task.isCompleted
+                                              ? TextDecoration.lineThrough
+                                              : TextDecoration.none,
+                                          color: task.isCompleted
+                                              ? Colors.grey
+                                              : Colors.black87,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                              const SizedBox(height: 4),
+                              // Category Chip
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: task.category.color.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: task.category.color.withOpacity(0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      task.category.icon,
+                                      size: 12,
+                                      color: task.category.color,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      task.category.displayName,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: task.category.color,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            color: Colors.red,
-                            onPressed: () => _deleteTask(index),
-                          ),
+                          trailing: _editingTaskIndex == index
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.check),
+                                      color: Colors.green,
+                                      onPressed: _saveEditedTask,
+                                      tooltip: 'Save',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.close),
+                                      color: Colors.red,
+                                      onPressed: _cancelEditing,
+                                      tooltip: 'Cancel',
+                                    ),
+                                  ],
+                                )
+                              : IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  color: Colors.red,
+                                  onPressed: () => _deleteTask(index),
+                                ),
                         ),
                       );
                     },
                   ),
           ),
 
-          // Bottom Stats Section
+          // Bottom Stats and Filter Section
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -263,22 +554,61 @@ class _TodoHomePageState extends State<TodoHomePage> {
                 ),
               ],
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
               children: [
-                Text(
-                  '$_remainingTasks tasks remaining',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey,
-                  ),
+                // Stats Row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '$_remainingTasks tasks remaining',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    Text(
+                      'Total: ${_tasks.length}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  'Total: ${_tasks.length}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
+                const SizedBox(height: 12),
+                // Filter Tabs
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: TaskFilter.values.map((filter) {
+                      final isSelected = _currentFilter == filter;
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () => _setFilter(filter),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected ? Colors.blue : Colors.transparent,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              _getFilterDisplayName(filter),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : Colors.grey[600],
+                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ),
               ],
@@ -292,6 +622,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
   @override
   void dispose() {
     _taskController.dispose();
+    _editController.dispose();
     super.dispose();
   }
 }

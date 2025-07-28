@@ -6,18 +6,63 @@ void main() {
   runApp(const TodoApp());
 }
 
-class TodoApp extends StatelessWidget {
+class TodoApp extends StatefulWidget {
   const TodoApp({super.key});
+
+  @override
+  State<TodoApp> createState() => _TodoAppState();
+}
+
+class _TodoAppState extends State<TodoApp> {
+  ThemeMode _themeMode = ThemeMode.light;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThemeMode();
+  }
+
+  Future<void> _loadThemeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isDark = prefs.getBool('isDarkMode') ?? false;
+    setState(() {
+      _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    });
+  }
+
+  Future<void> _toggleTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _themeMode = _themeMode == ThemeMode.light 
+          ? ThemeMode.dark 
+          : ThemeMode.light;
+    });
+    await prefs.setBool('isDarkMode', _themeMode == ThemeMode.dark);
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'My Todo App',
+      themeMode: _themeMode,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.light,
+        ),
         useMaterial3: true,
       ),
-      home: const TodoHomePage(),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      home: TodoHomePage(
+        onThemeToggle: _toggleTheme,
+        isDarkMode: _themeMode == ThemeMode.dark,
+      ),
     );
   }
 }
@@ -212,7 +257,10 @@ class Task {
 }
 
 class TodoHomePage extends StatefulWidget {
-  const TodoHomePage({super.key});
+  final VoidCallback onThemeToggle;
+  final bool isDarkMode;
+
+  const TodoHomePage({super.key, required this.onThemeToggle, required this.isDarkMode});
 
   @override
   State<TodoHomePage> createState() => _TodoHomePageState();
@@ -451,8 +499,10 @@ class _TodoHomePageState extends State<TodoHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         title: const Text(
           'My Todo List',
@@ -461,6 +511,16 @@ class _TodoHomePageState extends State<TodoHomePage> {
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 2,
+        actions: [
+          IconButton(
+            onPressed: widget.onThemeToggle,
+            icon: Icon(
+              widget.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+              color: Colors.white,
+            ),
+            tooltip: widget.isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -469,11 +529,11 @@ class _TodoHomePageState extends State<TodoHomePage> {
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
+                  color: colorScheme.shadow.withOpacity(0.1),
                   spreadRadius: 1,
                   blurRadius: 6,
                   offset: const Offset(0, 2),
@@ -752,11 +812,11 @@ class _TodoHomePageState extends State<TodoHomePage> {
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(8),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.grey.withOpacity(0.1),
+                              color: colorScheme.shadow.withOpacity(0.1),
                               spreadRadius: 1,
                               blurRadius: 4,
                               offset: const Offset(0, 1),
@@ -818,8 +878,8 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                                       ? TextDecoration.lineThrough
                                                       : TextDecoration.none,
                                                   color: task.isCompleted
-                                                      ? Colors.grey
-                                                      : Colors.black87,
+                                                      ? colorScheme.onSurface.withOpacity(0.6)
+                                                      : colorScheme.onSurface,
                                                   fontSize: 16,
                                                 ),
                                               ),
@@ -987,10 +1047,10 @@ class _TodoHomePageState extends State<TodoHomePage> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: colorScheme.surfaceContainerHighest,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
+                  color: colorScheme.shadow.withOpacity(0.1),
                   spreadRadius: 1,
                   blurRadius: 6,
                   offset: const Offset(0, -2),
@@ -1024,7 +1084,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
                 // Filter Tabs
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.grey[100],
+                    color: colorScheme.surfaceContainer,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(

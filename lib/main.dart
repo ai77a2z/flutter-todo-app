@@ -269,12 +269,15 @@ class TodoHomePage extends StatefulWidget {
 class _TodoHomePageState extends State<TodoHomePage> {
   final TextEditingController _taskController = TextEditingController();
   final TextEditingController _editController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   final FocusNode _taskFocusNode = FocusNode();
   final List<Task> _tasks = [];
   TaskFilter _currentFilter = TaskFilter.all;
   TaskCategory _selectedCategory = TaskCategory.personal;
   TaskPriority _selectedPriority = TaskPriority.medium;
   DateTime? _selectedDueDate;
+  String _searchQuery = '';
+  bool _isSearching = false;
   int? _editingTaskIndex; // Track which task is being edited
 
   @override
@@ -287,7 +290,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
     });
   }
 
-  // Get filtered tasks based on current filter
+  // Get filtered tasks based on current filter and search query
   List<Task> get _filteredTasks {
     List<Task> filtered;
     switch (_currentFilter) {
@@ -301,6 +304,14 @@ class _TodoHomePageState extends State<TodoHomePage> {
       default:
         filtered = _tasks;
         break;
+    }
+    
+    // Apply search filter if search query is not empty
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered.where((task) {
+        return task.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+               task.category.displayName.toLowerCase().contains(_searchQuery.toLowerCase());
+      }).toList();
     }
     
     // Sort by priority (high to low) and then by due date
@@ -328,6 +339,26 @@ class _TodoHomePageState extends State<TodoHomePage> {
     });
     
     return filtered;
+  }
+
+  void _startSearch() {
+    setState(() {
+      _isSearching = true;
+    });
+  }
+
+  void _stopSearch() {
+    setState(() {
+      _isSearching = false;
+      _searchQuery = '';
+      _searchController.clear();
+    });
+  }
+
+  void _updateSearchQuery(String query) {
+    setState(() {
+      _searchQuery = query;
+    });
   }
 
   // Load tasks from SharedPreferences
@@ -525,14 +556,38 @@ class _TodoHomePageState extends State<TodoHomePage> {
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: const Text(
-          'My Todo List',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: _isSearching
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Search tasks...',
+                  border: InputBorder.none,
+                  hintStyle: TextStyle(color: Colors.white70),
+                ),
+                style: const TextStyle(color: Colors.white, fontSize: 18),
+                onChanged: _updateSearchQuery,
+              )
+            : const Text(
+                'My Todo List',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 2,
         actions: [
+          if (_isSearching)
+            IconButton(
+              onPressed: _stopSearch,
+              icon: const Icon(Icons.close, color: Colors.white),
+              tooltip: 'Close Search',
+            )
+          else
+            IconButton(
+              onPressed: _startSearch,
+              icon: const Icon(Icons.search, color: Colors.white),
+              tooltip: 'Search Tasks',
+            ),
           IconButton(
             onPressed: widget.onThemeToggle,
             icon: Icon(
@@ -794,19 +849,23 @@ class _TodoHomePageState extends State<TodoHomePage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          _currentFilter == TaskFilter.completed 
-                              ? Icons.task_alt 
-                              : Icons.check_circle_outline,
+                          _searchQuery.isNotEmpty
+                              ? Icons.search_off
+                              : _currentFilter == TaskFilter.completed 
+                                  ? Icons.task_alt 
+                                  : Icons.check_circle_outline,
                           size: 64,
                           color: Colors.grey,
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          _currentFilter == TaskFilter.completed 
-                              ? 'No completed tasks!'
-                              : _currentFilter == TaskFilter.active
-                                  ? 'No active tasks!'
-                                  : 'No tasks yet!',
+                          _searchQuery.isNotEmpty
+                              ? 'No tasks found for "$_searchQuery"'
+                              : _currentFilter == TaskFilter.completed 
+                                  ? 'No completed tasks!'
+                                  : _currentFilter == TaskFilter.active
+                                      ? 'No active tasks!'
+                                      : 'No tasks yet!',
                           style: const TextStyle(
                             fontSize: 18,
                             color: Colors.grey,
@@ -814,9 +873,11 @@ class _TodoHomePageState extends State<TodoHomePage> {
                           ),
                         ),
                         Text(
-                          _currentFilter == TaskFilter.completed 
-                              ? 'Complete some tasks to see them here'
-                              : 'Add a task to get started',
+                          _searchQuery.isNotEmpty
+                              ? 'Try adjusting your search terms'
+                              : _currentFilter == TaskFilter.completed 
+                                  ? 'Complete some tasks to see them here'
+                                  : 'Add a task to get started',
                           style: const TextStyle(
                             fontSize: 14,
                             color: Colors.grey,
@@ -1216,6 +1277,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
   void dispose() {
     _taskController.dispose();
     _editController.dispose();
+    _searchController.dispose();
     _taskFocusNode.dispose();
     super.dispose();
   }

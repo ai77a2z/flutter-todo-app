@@ -7,8 +7,9 @@ echo "🚀 Starting Flutter Web Build..."
 
 # Install Flutter
 echo "📦 Installing Flutter..."
-wget -q https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.24.5-stable.tar.xz
-tar xf flutter_linux_3.24.5-stable.tar.xz
+wget -q https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.32.0-stable.tar.xz
+tar xf flutter_linux_3.32.0-stable.tar.xz
+rm flutter_linux_3.32.0-stable.tar.xz
 export PATH="$PATH:`pwd`/flutter/bin"
 
 # Verify Flutter installation

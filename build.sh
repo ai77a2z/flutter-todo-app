@@ -17,12 +17,16 @@ echo "✅ Verifying Flutter..."
 flutter --version
 flutter doctor --verbose
 
-# Configure for headless web builds (no Chrome needed)
+# Configure for headless web builds (ENHANCED for Flutter 3.32.0)
 echo "🌐 Configuring for headless web build environment..."
 export CHROME_EXECUTABLE="/dev/null"
 export FLUTTER_WEB_AUTO_DETECT=false
+export FLUTTER_WEB_USE_SKIA=true
+export FLUTTER_WEB_USE_CANVASKIT=true
+export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+export CI=true
 
-# Enable web support  
+# Enable web support
 echo "🌐 Enabling web support..."
 flutter config --enable-web
 flutter config --no-analytics
@@ -35,21 +39,26 @@ flutter pub get
 echo "🔍 Checking project structure..."
 ls -la
 
-# Build web app
+# Build web app with explicit HTML renderer (most compatible for CI)
 echo "🔨 Building web app..."
 echo "📝 Checking web targets available..."
 flutter devices
 
-echo "📝 Attempting simple web build first..."
-flutter build web --verbose 2>&1 || {
-    echo "❌ Simple build failed! Trying with release flag..."
-    flutter build web --release --verbose 2>&1 || {
-        echo "❌ Release build failed! Trying with base-href..."
-        flutter build web --base-href="/" --release --verbose 2>&1 || {
-            echo "❌ All build attempts failed!"
-            echo "🔍 Flutter configuration:"
-            flutter config
-            exit 1
+echo "📝 Attempting web build with HTML renderer (CI-friendly)..."
+flutter build web --web-renderer html --release --verbose 2>&1 || {
+    echo "❌ HTML renderer failed! Trying with canvaskit renderer..."
+    flutter build web --web-renderer canvaskit --release --verbose --dart-define=FLUTTER_WEB_USE_SKIA=true 2>&1 || {
+        echo "❌ CanvasKit failed! Trying with auto renderer..."
+        flutter build web --web-renderer auto --release --verbose 2>&1 || {
+            echo "❌ Auto renderer failed! Trying basic build..."
+            flutter build web --release --verbose 2>&1 || {
+                echo "❌ All build attempts failed!"
+                echo "🔍 Flutter configuration:"
+                flutter config
+                echo "🔍 Environment:"
+                env | grep FLUTTER
+                exit 1
+            }
         }
     }
 }
@@ -61,6 +70,8 @@ if [ -d "build/web" ]; then
     ls -la build/web/
     if [ -f "build/web/index.html" ]; then
         echo "✅ index.html found!"
+        echo "📄 index.html content preview:"
+        head -10 build/web/index.html
     else
         echo "❌ index.html not found in build/web/"
         exit 1
@@ -70,4 +81,4 @@ else
     exit 1
 fi
 
-echo "🎉 Build complete!" 
+echo "�� Build complete!" 

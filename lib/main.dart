@@ -877,7 +877,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
                 ),
               ],
             ),
-            child: Column(
+        child: Column(
               children: [
                 // Task Input Row
                 Row(
@@ -1107,7 +1107,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
             child: _filteredTasks.isEmpty
                 ? Center(
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
                           _searchQuery.isNotEmpty
@@ -1119,7 +1119,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
                           color: Colors.grey,
                         ),
                         const SizedBox(height: 16),
-                        Text(
+            Text(
                           _searchQuery.isNotEmpty
                               ? 'No tasks found for "$_searchQuery"'
                               : _currentFilter == TaskFilter.completed 
@@ -1143,9 +1143,9 @@ class _TodoHomePageState extends State<TodoHomePage> {
                             fontSize: 14,
                             color: Colors.grey,
                           ),
-                        ),
-                      ],
-                    ),
+            ),
+          ],
+        ),
                   )
                 : ReorderableListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),

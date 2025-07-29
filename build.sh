@@ -39,26 +39,25 @@ flutter pub get
 echo "🔍 Checking project structure..."
 ls -la
 
-# Build web app with explicit HTML renderer (most compatible for CI)
+# Build web app (Flutter 3.32.0 syntax - no --web-renderer flag)
 echo "🔨 Building web app..."
 echo "📝 Checking web targets available..."
 flutter devices
 
-echo "📝 Attempting web build with HTML renderer (CI-friendly)..."
-flutter build web --web-renderer html --release --verbose 2>&1 || {
-    echo "❌ HTML renderer failed! Trying with canvaskit renderer..."
-    flutter build web --web-renderer canvaskit --release --verbose --dart-define=FLUTTER_WEB_USE_SKIA=true 2>&1 || {
-        echo "❌ CanvasKit failed! Trying with auto renderer..."
-        flutter build web --web-renderer auto --release --verbose 2>&1 || {
-            echo "❌ Auto renderer failed! Trying basic build..."
-            flutter build web --release --verbose 2>&1 || {
-                echo "❌ All build attempts failed!"
-                echo "🔍 Flutter configuration:"
-                flutter config
-                echo "🔍 Environment:"
-                env | grep FLUTTER
-                exit 1
-            }
+echo "📝 Attempting web build with release mode..."
+flutter build web --release --verbose 2>&1 || {
+    echo "❌ Release build failed! Trying debug build..."
+    flutter build web --verbose 2>&1 || {
+        echo "❌ Debug build failed! Trying basic build..."
+        flutter build web 2>&1 || {
+            echo "❌ All build attempts failed!"
+            echo "🔍 Flutter configuration:"
+            flutter config
+            echo "🔍 Environment:"
+            env | grep FLUTTER
+            echo "🔍 Flutter help for build web:"
+            flutter build web --help
+            exit 1
         }
     }
 }

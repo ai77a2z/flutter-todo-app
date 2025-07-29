@@ -17,9 +17,15 @@ echo "✅ Verifying Flutter..."
 flutter --version
 flutter doctor --verbose
 
-# Enable web support
+# Configure for headless web builds (no Chrome needed)
+echo "🌐 Configuring for headless web build environment..."
+export CHROME_EXECUTABLE="/dev/null"
+export FLUTTER_WEB_AUTO_DETECT=false
+
+# Enable web support  
 echo "🌐 Enabling web support..."
 flutter config --enable-web
+flutter config --no-analytics
 
 # Install dependencies
 echo "📚 Installing dependencies..."
@@ -31,15 +37,20 @@ ls -la
 
 # Build web app
 echo "🔨 Building web app..."
-echo "📝 Running: flutter build web --base-href=/ --release --web-renderer=canvaskit"
-flutter build web --base-href="/" --release --web-renderer=canvaskit --verbose || {
-    echo "❌ Flutter build failed! Trying with different settings..."
-    echo "📝 Attempting: flutter build web --base-href=/ --release"
-    flutter build web --base-href="/" --release --verbose || {
-        echo "❌ Both build attempts failed!"
-        echo "🔍 Checking if web is enabled..."
-        flutter config --enable-web
-        flutter build web --base-href="/" --release --verbose
+echo "📝 Checking web targets available..."
+flutter devices
+
+echo "📝 Attempting simple web build first..."
+flutter build web --verbose 2>&1 || {
+    echo "❌ Simple build failed! Trying with release flag..."
+    flutter build web --release --verbose 2>&1 || {
+        echo "❌ Release build failed! Trying with base-href..."
+        flutter build web --base-href="/" --release --verbose 2>&1 || {
+            echo "❌ All build attempts failed!"
+            echo "🔍 Flutter configuration:"
+            flutter config
+            exit 1
+        }
     }
 }
 

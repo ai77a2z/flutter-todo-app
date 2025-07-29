@@ -764,23 +764,11 @@ class _TodoHomePageState extends State<TodoHomePage> {
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: _isSearching
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'Search tasks...',
-                  border: InputBorder.none,
-                  hintStyle: TextStyle(color: Colors.white70),
-                ),
-                style: const TextStyle(color: Colors.white, fontSize: 18),
-                onChanged: _updateSearchQuery,
-              )
-            : const Text(
-                'My Todo List',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-        backgroundColor: Colors.blue,
+        backgroundColor: colorScheme.inversePrimary,
+        title: Text(
+          _isSearching ? '' : 'Todo App v2.0',
+          style: TextStyle(color: colorScheme.onInverseSurface),
+        ),
         foregroundColor: Colors.white,
         elevation: 2,
         actions: [

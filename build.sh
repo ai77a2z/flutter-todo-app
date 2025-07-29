@@ -17,6 +17,10 @@ echo "✅ Verifying Flutter..."
 flutter --version
 flutter doctor --verbose
 
+# Enable web support
+echo "🌐 Enabling web support..."
+flutter config --enable-web
+
 # Install dependencies
 echo "📚 Installing dependencies..."
 flutter pub get
@@ -27,7 +31,17 @@ ls -la
 
 # Build web app
 echo "🔨 Building web app..."
-flutter build web --base-href="/" --release --dart-define=FLUTTER_WEB_USE_SKIA=true
+echo "📝 Running: flutter build web --base-href=/ --release --web-renderer=canvaskit"
+flutter build web --base-href="/" --release --web-renderer=canvaskit --verbose || {
+    echo "❌ Flutter build failed! Trying with different settings..."
+    echo "📝 Attempting: flutter build web --base-href=/ --release"
+    flutter build web --base-href="/" --release --verbose || {
+        echo "❌ Both build attempts failed!"
+        echo "🔍 Checking if web is enabled..."
+        flutter config --enable-web
+        flutter build web --base-href="/" --release --verbose
+    }
+}
 
 # Verify build output
 echo "🔍 Verifying build output..."
